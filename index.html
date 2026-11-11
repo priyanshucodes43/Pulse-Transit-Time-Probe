@@ -1,0 +1,414 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Pulse Transit Time Probe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one 3D stage on top, controls and step strip beneath, then scope + OLED readout side by side. Single dark "bench instrument" look. */
+:root{
+  --bg:#0a1016; --panel:#101a23; --line:#22323f; --fg:#e8f0f5; --mute:#8da2b1;
+  --blood:#ff5a4f; --ear:#4fd6e8; --finger:#ffc24a;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--fg);font:400 15px/1.6 var(--body);
+  padding-block:24px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font:800 clamp(30px,5.4vw,52px)/1.02 var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font:600 18px/1.2 var(--display);margin:0 0 10px;letter-spacing:-.005em}
+p{margin:0}
+.lede{max-width:62ch;color:var(--mute);font-size:16px;margin-top:12px}
+.hw{font:400 12px var(--mono);color:var(--mute);letter-spacing:.04em;margin-top:14px}
+
+.stage{position:relative;height:clamp(340px,56vw,520px);border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 38%,#16252f 0%,#0b131a 62%,#0a1016 100%)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
+#gl:active{cursor:grabbing}
+.tag{position:absolute;left:0;top:0;font:500 11px var(--mono);letter-spacing:.07em;text-transform:uppercase;
+  padding:3px 7px;border:1px solid currentColor;background:rgba(10,16,22,.78);white-space:nowrap;pointer-events:none;will-change:transform}
+.tag.heart{color:var(--blood)} .tag.ear{color:var(--ear)} .tag.fin{color:var(--finger)}
+.clock{position:absolute;left:12px;top:12px;font:400 12px/1.7 var(--mono);background:rgba(10,16,22,.8);
+  border:1px solid var(--line);padding:8px 10px;min-width:196px}
+.clock div{display:flex;justify-content:space-between;gap:14px}
+.clock span:first-child{color:var(--mute)}
+.clock .e{color:var(--ear)} .clock .f{color:var(--finger)} .clock .p{color:var(--fg);font-weight:500}
+.hint{position:absolute;right:12px;bottom:10px;font:400 11px var(--mono);color:var(--mute);background:rgba(10,16,22,.7);padding:2px 6px}
+.nogl{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;color:var(--mute)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+button{font:500 13px var(--mono);color:var(--fg);background:var(--panel);border:1px solid var(--line);padding:9px 13px;border-radius:4px;cursor:pointer;letter-spacing:.02em}
+button:hover{border-color:var(--mute)}
+button[aria-pressed="true"]{border-color:var(--finger);color:var(--finger);background:#17222b}
+button:focus-visible{outline:2px solid var(--ear);outline-offset:2px}
+.slow{font:400 12px var(--mono);color:var(--mute)}
+
+ol.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+ol.steps li{border:1px solid var(--line);padding:12px 13px;border-radius:4px;color:var(--mute);transition:border-color .2s,color .2s,background .2s;min-width:0}
+ol.steps b{display:block;font:600 14px var(--display);color:var(--fg);margin-bottom:3px}
+ol.steps li i{font:400 11px var(--mono);font-style:normal;color:var(--mute);display:block;margin-bottom:6px;letter-spacing:.08em}
+ol.steps li.on{background:#13202a;color:var(--fg)}
+ol.steps li.on[data-c="blood"]{border-color:var(--blood)}
+ol.steps li.on[data-c="ear"]{border-color:var(--ear)}
+ol.steps li.on[data-c="fin"]{border-color:var(--finger)}
+ol.steps li.on[data-c="fg"]{border-color:var(--fg)}
+
+.lower{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:16px;min-width:0}
+.panel .sub{color:var(--mute);font-size:13px;margin-bottom:10px}
+#scope{display:block;width:100%;height:200px}
+.oled{background:#000;border:1px solid #2b3b47;padding:14px;font:400 13px/1.9 var(--mono)}
+.oled .ttl{color:var(--ear);letter-spacing:.06em;margin-bottom:4px;display:flex;justify-content:space-between;gap:8px}
+.oled .row{display:flex;justify-content:space-between;gap:10px;border-top:1px dashed #1c2a34}
+.oled .row span:first-child{color:var(--mute)}
+.oled .st{margin-top:6px;color:var(--finger);font-weight:500}
+.led{font-size:11px;color:var(--mute)}
+.led.on{color:var(--blood)}
+.flash{animation:fl .7s ease-out}
+@keyframes fl{from{background:#1d3340}to{background:transparent}}
+
+.explain{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.explain p{color:var(--mute);font-size:14px}
+.note{font-size:12.5px;color:var(--mute);border-top:1px solid var(--line);padding-top:14px;max-width:80ch}
+
+@media (max-width:860px){
+  .lower{grid-template-columns:minmax(0,1fr)}
+  .explain{grid-template-columns:minmax(0,1fr)}
+  ol.steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:520px){
+  .clock{min-width:0;font-size:11px;padding:6px 8px;left:8px;top:8px}
+  ol.steps{grid-template-columns:minmax(0,1fr)}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Pulse Transit Time Probe</h1>
+    <p class="lede">Two light clips time one heartbeat as it reaches your ear, then your fingertip. The gap between the two, in milliseconds, shows how stiff your arteries are. No arm cuff needed.</p>
+    <p class="hw">ESP32 + 2 optical pulse sensors + OLED, about ₹1,200 to ₹1,800</p>
+  </header>
+
+  <section>
+    <div class="stage" id="stage">
+      <canvas id="gl" aria-label="3D model of a person with a clip on the ear and a clip on the index finger, with a pulse wave travelling from the heart to both clips"></canvas>
+      <div class="tag heart" id="lb-heart">Heart</div>
+      <div class="tag ear" id="lb-ear">Sensor 1 · Earlobe</div>
+      <div class="tag fin" id="lb-fin">Sensor 2 · Fingertip</div>
+      <div class="clock" aria-live="off">
+        <div><span>Since heartbeat</span><span class="p" id="sw-t">0 ms</span></div>
+        <div><span>Ear peak at</span><span class="e" id="sw-e">-</span></div>
+        <div><span>Finger peak at</span><span class="f" id="sw-f">-</span></div>
+        <div><span>PTT (finger − ear)</span><span class="p" id="sw-p">-</span></div>
+      </div>
+      <div class="hint">drag left or right to rotate</div>
+      <div class="nogl" id="nogl">The 3D view needs WebGL, which this browser has turned off. The waveforms and readout below still run.</div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Body state">
+      <button type="button" data-sc="rest" aria-pressed="true">Resting</button>
+      <button type="button" data-sc="exercise" aria-pressed="false">After exercise</button>
+      <button type="button" data-sc="caffeine" aria-pressed="false">After coffee</button>
+      <button type="button" data-sc="breath" aria-pressed="false">Holding breath</button>
+    </div>
+    <div class="seg">
+      <button type="button" id="play" aria-pressed="false">Pause</button>
+      <span class="slow">Slow motion, about 12× slower than real</span>
+    </div>
+  </div>
+
+  <ol class="steps" id="steps">
+    <li data-c="blood"><i>STEP 1</i><b>Heart pushes blood</b>Each beat sends a pressure wave into the arteries.</li>
+    <li data-c="ear"><i>STEP 2</i><b>Wave hits the ear</b>Sensor 1 sees the light change and stamps the time.</li>
+    <li data-c="fin"><i>STEP 3</i><b>Wave hits the finger</b>It travels further, so Sensor 2 sees it later.</li>
+    <li data-c="fg"><i>STEP 4</i><b>ESP32 subtracts</b>Finger time minus ear time gives PTT.</li>
+  </ol>
+
+  <div class="lower">
+    <section class="panel">
+      <h2>What the two sensors record</h2>
+      <p class="sub">The cyan trace is the earlobe, the amber trace is the fingertip. The dashed lines mark each peak. The distance between them is PTT.</p>
+      <canvas id="scope" aria-label="Two scrolling pulse waveforms, ear above and finger below, with the delay between their peaks marked"></canvas>
+    </section>
+    <section class="panel">
+      <h2>What the OLED shows</h2>
+      <div class="oled" id="oled">
+        <div class="ttl"><span>[ HEMODYNAMIC PTT PROBE ]</span><span class="led" id="r-led">● measuring</span></div>
+        <div class="row"><span>Heart Rate</span><span id="r-hr">74 BPM</span></div>
+        <div class="row"><span>Ear-to-Finger PTT</span><span id="r-ptt">118 ms</span></div>
+        <div class="row"><span>Arterial Rigidity</span><span id="r-rig">LOW (Elastic)</span></div>
+        <div class="row"><span>Est. Systolic BP</span><span id="r-sbp">118 mmHg</span></div>
+        <div class="st" id="r-st">HEALTHY VASCULAR PROFILE</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="explain">
+    <div><h2>Elastic vessels</h2><p>Soft, stretchy arteries slow the wave down. The delay between ear and finger is long, around 100 to 140 ms.</p></div>
+    <div><h2>Stiff or tense vessels</h2><p>Hard or constricted arteries pass the wave quickly. The delay shrinks, below about 80 ms. Pick a state above and watch the gap close.</p></div>
+    <div><h2>Why no cuff</h2><p>The cuff squeezes to measure pressure once. Light clips watch every beat, so the reading updates continuously.</p></div>
+  </section>
+
+  <p class="note">The numbers in each state are illustrative values for teaching. A real cuffless blood pressure estimate has to be calibrated for each person against a cuff reading, and this device is a learning prototype, not a medical instrument.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+var SLOW=12, BEAT=5.0, WIN=9;
+var SC={
+  rest:    {ptt:118,hr:74, sbp:118,rig:'LOW (Elastic)',  st:'HEALTHY VASCULAR PROFILE'},
+  exercise:{ptt:82, hr:128,sbp:142,rig:'MODERATE',       st:'HIGH DYNAMIC PRESSURE'},
+  caffeine:{ptt:90, hr:82, sbp:132,rig:'MODERATE',       st:'CAFFEINE VASOCONSTRICTION'},
+  breath:  {ptt:72, hr:66, sbp:138,rig:'HIGH (Stiff)',   st:'HIGH VASCULAR RESISTANCE'}
+};
+var cs=getComputedStyle(document.documentElement);
+function tok(n){return cs.getPropertyValue(n).trim();}
+var C={ear:tok('--ear'),fin:tok('--finger'),fg:tok('--fg'),mute:tok('--mute'),line:tok('--line'),blood:tok('--blood')};
+function $(id){return document.getElementById(id);}
+
+/* ---------- geometry (shared by 3D scene and timing) ---------- */
+var hasThree=(typeof THREE!=='undefined');
+var Le=1.0, Lf=1.6, earCurve=null, finCurve=null;
+var HEART=null,EAR=null,FIN=null;
+if(hasThree){
+  HEART=new THREE.Vector3(0.12,1.2,0.12);
+  EAR=new THREE.Vector3(0.3,2.0,0.0);
+  FIN=new THREE.Vector3(0.93,0.48,0.26);
+  earCurve=new THREE.CatmullRomCurve3([HEART,new THREE.Vector3(0.1,1.45,0.1),new THREE.Vector3(0.16,1.7,0.1),new THREE.Vector3(0.24,1.88,0.08),EAR]);
+  finCurve=new THREE.CatmullRomCurve3([HEART,new THREE.Vector3(0.2,1.42,0.1),new THREE.Vector3(0.4,1.45,0.08),new THREE.Vector3(0.6,1.2,0.1),new THREE.Vector3(0.72,0.95,0.12),new THREE.Vector3(0.82,0.78,0.18),new THREE.Vector3(0.88,0.62,0.22),FIN]);
+  Le=earCurve.getLength(); Lf=finCurve.getLength();
+}
+var dL=Lf-Le;
+
+/* ---------- timing model ---------- */
+var sc='rest', simTime=0, playing=true, beats=[], bt=null;
+var shown={ptt:118,hr:74,sbp:118,rig:'LOW (Elastic)',st:'HEALTHY VASCULAR PROFILE'};
+function newBeat(tb){
+  var base=SC[sc].ptt, ptt=base+(Math.random()-.5)*4;
+  var v=dL/(ptt/1000*SLOW);
+  var b={tb:tb,ptt:ptt,v:v,tE:Le/v,tF:Lf/v,reported:false,sc:sc};
+  beats.push(b); if(beats.length>6)beats.shift();
+  return b;
+}
+bt=newBeat(0); simTime=1.2;
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){playing=false;$('play').textContent='Play';$('play').setAttribute('aria-pressed','true');}
+
+/* ---------- 3D scene ---------- */
+var update3D=null;
+function init3D(){
+  var stage=$('stage'), cv=$('gl');
+  var renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  var scene=new THREE.Scene();
+  var camera=new THREE.PerspectiveCamera(40,1,.1,50);
+  var target=new THREE.Vector3(0.4,1.2,0.1), theta=0.45, phi=1.38, R=5.4, drag=false, turned=false, lx=0;
+
+  var bodyMat=new THREE.MeshBasicMaterial({color:0x6c8da3,transparent:true,opacity:.07,side:THREE.DoubleSide,depthWrite:false});
+  var wireMat=new THREE.LineBasicMaterial({color:0x58798f,transparent:true,opacity:.3});
+  function addBody(mesh){mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(mesh.geometry),wireMat));scene.add(mesh);return mesh;}
+  function limb(a,b,r){
+    var d=new THREE.Vector3().subVectors(b,a),len=d.length();
+    var m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,12,2,true),bodyMat);
+    m.position.copy(a).add(b).multiplyScalar(.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+    return addBody(m);
+  }
+  var head=new THREE.Mesh(new THREE.SphereGeometry(.29,20,14),bodyMat);head.position.set(0,2.0,0);head.scale.set(1,1.15,1);addBody(head);
+  var neck=new THREE.Mesh(new THREE.CylinderGeometry(.11,.12,.32,12,1,true),bodyMat);neck.position.set(0,1.68,0);addBody(neck);
+  var torso=new THREE.Mesh(new THREE.CylinderGeometry(.36,.3,1.2,18,3,true),bodyMat);torso.position.set(0,.95,0);torso.scale.set(1,1,.6);addBody(torso);
+  [-1,1].forEach(function(s){var sh=new THREE.Mesh(new THREE.SphereGeometry(.14,10,8),bodyMat);sh.position.set(s*.43,1.47,.03);addBody(sh);});
+  limb(new THREE.Vector3(.45,1.45,.05),new THREE.Vector3(.72,.95,.1),.085);
+  limb(new THREE.Vector3(.72,.95,.1),new THREE.Vector3(.88,.62,.22),.07);
+  limb(new THREE.Vector3(-.45,1.45,.05),new THREE.Vector3(-.72,.95,.1),.085);
+  limb(new THREE.Vector3(-.72,.95,.1),new THREE.Vector3(-.88,.62,.22),.07);
+  var hand=new THREE.Mesh(new THREE.BoxGeometry(.1,.2,.06),bodyMat);hand.position.set(.91,.55,.24);hand.rotation.z=-.3;addBody(hand);
+
+  function artMat(L){
+    return new THREE.ShaderMaterial({transparent:true,depthWrite:false,
+      uniforms:{uP:{value:-1},uSig:{value:.12/L},uCol:{value:new THREE.Color(0xfff1e6)},uBase:{value:new THREE.Color(0x8c333a)}},
+      vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader:'varying vec2 vUv;uniform float uP;uniform float uSig;uniform vec3 uCol;uniform vec3 uBase;void main(){float x=(vUv.x-uP)/uSig;float g=exp(-x*x);gl_FragColor=vec4(mix(uBase,uCol,g),0.6+0.4*g);}'});
+  }
+  var mE=artMat(Le), mF=artMat(Lf);
+  scene.add(new THREE.Mesh(new THREE.TubeGeometry(earCurve,120,.035,10,false),mE));
+  scene.add(new THREE.Mesh(new THREE.TubeGeometry(finCurve,160,.035,10,false),mF));
+
+  var heart=new THREE.Mesh(new THREE.SphereGeometry(.13,20,16),new THREE.MeshBasicMaterial({color:0xff5a4f}));heart.position.copy(HEART);scene.add(heart);
+  var hHalo=new THREE.Mesh(new THREE.SphereGeometry(.2,16,12),new THREE.MeshBasicMaterial({color:0xff5a4f,transparent:true,opacity:.2,depthWrite:false}));hHalo.position.copy(HEART);scene.add(hHalo);
+
+  function pulseBall(){
+    var g=new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(.055,14,10),new THREE.MeshBasicMaterial({color:0xfff1e6})));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(.1,14,10),new THREE.MeshBasicMaterial({color:0xff7a6f,transparent:true,opacity:.35,depthWrite:false})));
+    g.visible=false;scene.add(g);return g;
+  }
+  var pE=pulseBall(), pF=pulseBall();
+
+  var earClip=new THREE.Mesh(new THREE.TorusGeometry(.075,.022,8,22),new THREE.MeshBasicMaterial({color:0x4fd6e8}));
+  earClip.position.copy(EAR).add(new THREE.Vector3(.03,0,0));earClip.rotation.y=Math.PI/2;scene.add(earClip);
+  var finClip=new THREE.Mesh(new THREE.BoxGeometry(.1,.13,.1),new THREE.MeshBasicMaterial({color:0xffc24a}));
+  finClip.position.copy(FIN).add(new THREE.Vector3(.01,-.01,.03));finClip.rotation.z=-.3;scene.add(finClip);
+  function halo(col,pos){var h=new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0,depthWrite:false}));h.position.copy(pos);scene.add(h);return h;}
+  var hE=halo(0x4fd6e8,EAR), hF=halo(0xffc24a,FIN);
+
+  var labels=[
+    {el:$('lb-heart'),p:HEART,dx:'calc(-100% - 16px)',dy:'-50%'},
+    {el:$('lb-ear'),p:EAR,dx:'18px',dy:'-120%'},
+    {el:$('lb-fin'),p:FIN,dx:'18px',dy:'-50%'}
+  ];
+
+  function resize(){
+    var w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;
+    renderer.setSize(w,h,false);camera.aspect=w/h;
+    R=camera.aspect<.9?5.4+(.9-camera.aspect)*6:5.4;
+    camera.updateProjectionMatrix();
+  }
+  if(window.ResizeObserver){new ResizeObserver(resize).observe(stage);}else{window.addEventListener('resize',resize);}
+  resize();
+
+  cv.addEventListener('pointerdown',function(e){drag=true;turned=true;lx=e.clientX;try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+  cv.addEventListener('pointermove',function(e){if(!drag)return;theta-=(e.clientX-lx)*.008;lx=e.clientX;});
+  function endDrag(){drag=false;}
+  cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',endDrag);
+
+  var v3=new THREE.Vector3();
+  return function(local,wall){
+    var th=theta+(turned?0:Math.sin(wall*.18)*.22);
+    camera.position.set(target.x+R*Math.sin(phi)*Math.sin(th),target.y+R*Math.cos(phi),target.z+R*Math.sin(phi)*Math.cos(th));
+    camera.lookAt(target);
+
+    var s=1+.28*Math.exp(-Math.max(local,0)*4);
+    heart.scale.setScalar(s);hHalo.scale.setScalar(1+.7*(s-1)*3);
+
+    var uE=local/bt.tE, uF=local/bt.tF;
+    mE.uniforms.uP.value=uE; mF.uniforms.uP.value=uF;
+    if(uE>=0&&uE<=1){pE.visible=true;pE.position.copy(earCurve.getPointAt(uE));}else pE.visible=false;
+    if(uF>=0&&uF<=1){pF.visible=true;pF.position.copy(finCurve.getPointAt(uF));}else pF.visible=false;
+
+    var fE=local>=bt.tE?Math.exp(-(local-bt.tE)*2.2):0, fF=local>=bt.tF?Math.exp(-(local-bt.tF)*2.2):0;
+    hE.material.opacity=.7*fE;hE.scale.setScalar(1+(1-fE)*1.1*(fE>0?1:0));
+    hF.material.opacity=.7*fF;hF.scale.setScalar(1+(1-fF)*1.1*(fF>0?1:0));
+
+    var w=stage.clientWidth,h=stage.clientHeight;
+    labels.forEach(function(l){
+      v3.copy(l.p).project(camera);
+      var x=(v3.x*.5+.5)*w,y=(-v3.y*.5+.5)*h;
+      l.el.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px) translate('+l.dx+','+l.dy+')';
+    });
+    renderer.render(scene,camera);
+  };
+}
+if(hasThree){try{update3D=init3D();}catch(err){update3D=null;}}
+if(!update3D){$('nogl').style.display='grid';['lb-heart','lb-ear','lb-fin'].forEach(function(i){$(i).style.display='none';});}
+
+/* ---------- scope ---------- */
+var scope=$('scope'), sctx=scope.getContext('2d');
+function shape(x,wide){
+  var s=wide?.34:.28; if(x<-1.3||x>2.8)return 0;
+  return Math.exp(-(x*x)/(s*s))+.32*Math.exp(-Math.pow((x-(wide?1.05:.95))/.42,2));
+}
+function drawScope(){
+  var d=Math.min(window.devicePixelRatio||1,2),w=scope.clientWidth,h=scope.clientHeight;
+  if(!w||!h)return;
+  if(scope.width!==Math.round(w*d)||scope.height!==Math.round(h*d)){scope.width=Math.round(w*d);scope.height=Math.round(h*d);}
+  sctx.setTransform(d,0,0,d,0,0);sctx.clearRect(0,0,w,h);
+  var laneE=h*.3,laneF=h*.76,amp=h*.2;
+  sctx.lineWidth=1;sctx.strokeStyle=C.line;sctx.setLineDash([]);
+  [laneE,laneF].forEach(function(y){sctx.beginPath();sctx.moveTo(0,y);sctx.lineTo(w,y);sctx.stroke();});
+  sctx.font='500 11px "IBM Plex Mono",monospace';
+  sctx.fillStyle=C.ear;sctx.fillText('EAR',6,14);
+  sctx.fillStyle=C.fin;sctx.fillText('FINGER',6,h*.46);
+  function trace(base,col,wide,k,a){
+    sctx.beginPath();sctx.strokeStyle=col;sctx.lineWidth=2;sctx.lineJoin='round';
+    for(var px=0;px<=w;px+=2){
+      var t=simTime-WIN*(1-px/w),val=0;
+      for(var i=0;i<beats.length;i++){var b=beats[i];val+=a*shape(t-(b.tb+b[k]),wide);}
+      var y=base-amp*val;
+      if(px===0)sctx.moveTo(px,y);else sctx.lineTo(px,y);
+    }
+    sctx.stroke();
+  }
+  trace(laneE+amp*.55,C.ear,false,'tE',1);
+  trace(laneF+amp*.55,C.fin,true,'tF',.85);
+  var yMid=(laneE+laneF)/2+amp*.55;
+  beats.forEach(function(b){
+    var xe=w*(1-(simTime-(b.tb+b.tE))/WIN),xf=w*(1-(simTime-(b.tb+b.tF))/WIN);
+    if(xe>=0&&xe<=w){sctx.setLineDash([3,4]);sctx.strokeStyle=C.ear;sctx.lineWidth=1;sctx.beginPath();sctx.moveTo(xe,laneE-amp*.5);sctx.lineTo(xe,laneF+amp*.55);sctx.stroke();}
+    if(xf>=0&&xf<=w&&simTime>=b.tb+b.tF){
+      sctx.setLineDash([3,4]);sctx.strokeStyle=C.fin;sctx.beginPath();sctx.moveTo(xf,laneE+amp*.5);sctx.lineTo(xf,laneF+amp*.55-amp*.9);sctx.stroke();
+      sctx.setLineDash([]);sctx.strokeStyle=C.fg;sctx.lineWidth=1.5;
+      sctx.beginPath();sctx.moveTo(xe,yMid);sctx.lineTo(xf,yMid);sctx.moveTo(xe,yMid-5);sctx.lineTo(xe,yMid+5);sctx.moveTo(xf,yMid-5);sctx.lineTo(xf,yMid+5);sctx.stroke();
+      sctx.fillStyle=C.fg;sctx.font='500 11px "IBM Plex Mono",monospace';
+      var txt=Math.round(b.ptt)+' ms',tw=sctx.measureText(txt).width,tx=Math.min(Math.max((xe+xf)/2-tw/2,2),w-tw-2);
+      sctx.fillText(txt,tx,yMid-8);
+    }
+  });
+  sctx.setLineDash([]);
+}
+
+/* ---------- readout + steps ---------- */
+var stepEls=[].slice.call(document.querySelectorAll('#steps li'));
+var lastStep=-1;
+function setStep(i){if(i===lastStep)return;lastStep=i;stepEls.forEach(function(el,k){el.classList.toggle('on',k===i);});}
+function showReadout(){
+  $('r-hr').textContent=shown.hr+' BPM';$('r-ptt').textContent=Math.round(shown.ptt)+' ms';
+  $('r-rig').textContent=shown.rig;$('r-sbp').textContent=shown.sbp+' mmHg';$('r-st').textContent=shown.st;
+  var o=$('oled');o.classList.remove('flash');void o.offsetWidth;o.classList.add('flash');
+}
+
+/* ---------- controls ---------- */
+[].forEach.call(document.querySelectorAll('button[data-sc]'),function(btn){
+  btn.addEventListener('click',function(){
+    sc=btn.getAttribute('data-sc');
+    [].forEach.call(document.querySelectorAll('button[data-sc]'),function(b){b.setAttribute('aria-pressed',b===btn?'true':'false');});
+    bt=newBeat(simTime);
+    $('r-led').classList.add('on');$('r-led').textContent='● measuring';
+  });
+});
+$('play').addEventListener('click',function(){
+  playing=!playing;$('play').textContent=playing?'Pause':'Play';$('play').setAttribute('aria-pressed',playing?'false':'true');
+});
+
+/* ---------- main loop ---------- */
+var last=performance.now();
+function frame(now){
+  var dt=Math.min((now-last)/1000,.05);last=now;
+  if(playing){
+    simTime+=dt;
+    if(simTime>=bt.tb+BEAT){bt=newBeat(bt.tb+BEAT);$('r-led').classList.add('on');$('r-led').textContent='● measuring';}
+  }
+  var local=simTime-bt.tb;
+  var step=local<.5?0:(local<bt.tE+.3?1:(local<bt.tF+.3?2:3));
+  setStep(step);
+  $('sw-t').textContent=Math.round(Math.min(local,bt.tF)/SLOW*1000)+' ms';
+  $('sw-e').textContent=local>=bt.tE?Math.round(bt.tE/SLOW*1000)+' ms':'-';
+  $('sw-f').textContent=local>=bt.tF?Math.round(bt.tF/SLOW*1000)+' ms':'-';
+  $('sw-p').textContent=local>=bt.tF?Math.round(bt.ptt)+' ms':'-';
+  if(local>=bt.tF+.2&&!bt.reported){
+    bt.reported=true;var S=SC[bt.sc];
+    shown={ptt:bt.ptt,hr:S.hr,sbp:S.sbp,rig:S.rig,st:S.st};showReadout();
+    $('r-led').classList.remove('on');$('r-led').textContent='● updated';
+  }
+  if(update3D)update3D(local,now/1000);
+  drawScope();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
